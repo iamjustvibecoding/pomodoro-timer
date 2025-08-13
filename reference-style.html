@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Gentle Encouragement Widget</title>
+  <style>
+    :root{
+      --bg:#ffffff;
+      --card:#f7f7f9;
+      --text:#1c1c1f;
+      --muted:#6b6b76;
+      --accent:#4f46e5; /* customizable */
+      --accent-pressed:#4338ca;
+      --ring: rgba(79,70,229,.35);
+      --scale: 1; /* updated via ResizeObserver */
+    }
+    @media (prefers-color-scheme: dark){
+      :root{
+        --bg:#0c0c0f;
+        --card:#15151a;
+        --text:#e9e9ee;
+        --muted:#a0a0ad;
+        --accent:#7c7cff;
+        --accent-pressed:#6464ff;
+        --ring: rgba(124,124,255,.35);
+      }
+    }
+
+    html,body{height:100%}
+    body{
+      margin:0; background:var(--bg); color:var(--text);
+      font: calc(14px * var(--scale)) / 1.5 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+      display:grid; place-items:center;
+      padding:clamp(12px, 3vw, 24px);
+      box-sizing:border-box;
+    }
+
+    .card{
+      width: min(900px, 100%);
+      background:var(--card);
+      border-radius:20px;
+      box-shadow:0 6px 24px rgba(0,0,0,.12), inset 0 1px 0 rgba(255,255,255,.04);
+      padding:clamp(16px, 3.5vw, 24px);
+      border:1px solid rgba(0,0,0,.06);
+      box-sizing:border-box;
+    }
+
+    h1{ margin:0 0 6px 0; font-size:clamp(16px, 1.6rem, 22px); letter-spacing:.2px }
+    .sub{ color:var(--muted); margin:0 0 16px 0; font-size:clamp(12px, .9rem, 14px) }
+
+    .quote{
+      font-size:clamp(18px, 2.3rem, 28px);
+      line-height:1.35;
+      margin:16px 0 20px 0;
+      padding:14px 16px;
+      background:rgba(0,0,0,.04);
+      border-radius:14px;
+      word-wrap:break-word;
+    }
+    @media (prefers-color-scheme: dark){
+      .quote{ background:rgba(255,255,255,.06) }
+    }
+
+    .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap }
+    button{
+      appearance:none; border:0; cursor:pointer;
+      background:var(--accent); color:white;
+      padding:12px 16px; border-radius:12px; font-weight:600;
+      transition:transform .03s ease, background-color .12s ease;
+      box-shadow:0 0 0 0 var(--ring);
+      font-size:clamp(14px, 1rem, 16px);
+    }
+    button:active{ transform: translateY(1px); background:var(--accent-pressed) }
+    button:focus-visible{ outline:none; box-shadow:0 0 0 6px var(--ring) }
+
+    .picker{
+      margin-left:auto; display:flex; align-items:center; gap:8px; color:var(--muted);
+      font-size:clamp(12px, .95rem, 14px);
+    }
+    .picker input{ width:36px; height:30px; padding:0; border:0; background:transparent }
+
+    /* ultra-narrow embeds */
+    @container (inline-size < 360px) {
+      .row { gap:8px }
+      button { width:100% }
+      .picker { width:100%; justify-content:flex-start; margin-left:0 }
+    }
+    @media (max-width: 360px){
+      button { width:100% }
+      .picker { width:100%; margin-left:0 }
+    }
+
+    @media (prefers-reduced-motion: reduce){
+      * { transition:none !important; animation: none !important }
+    }
+  </style>
+</head>
+<body>
+  <main class="card" role="region" aria-labelledby="title">
+    <h1 id="title">A gentle nudge</h1>
+    <p class="sub">Press the button or refresh for a kind reminder.</p>
+    <div id="quote" class="quote" aria-live="polite"></div>
+    <div class="row">
+      <button id="moreBtn" type="button">Get more encouragement</button>
+      <div class="picker" title="Pick an accent color">
+        <span>Accent</span>
+        <input id="colorPick" type="color" aria-label="Pick accent color" />
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const STORAGE_KEYS = { LAST: 'encouragement:lastIndex', COLOR: 'encouragement:accent' };
+
+    // 200 gentle, kind, habit‑focused phrases (no numbers)
+    const phrases = [
+"It’s okay to go slow; you’re still moving.",
+"One soft step today is enough.",
+"You’re doing your best, and that’s worthy.",
+"A tiny start is still a start.",
+"Be gentle with your pace; it’s yours.",
+"Every small effort is care for future you.",
+"You don’t need to rush to be real.",
+"Your consistency can be calm and kind.",
+"Showing up softly is still showing up.",
+"Let today be light and steady.",
+"You’re allowed to ease into progress.",
+"Little by little is loving.",
+"You can take your time and still arrive.",
+"A quiet win still counts.",
+"Today asks only for what you can give.",
+"Kindness toward yourself helps habits grow.",
+"Take the next small, kind step.",
+"Your pace is perfectly human.",
+"Rest and progress can coexist.",
+"Begin gently; continue gently.",
+"You’re building trust with yourself, softly.",
+"A minute of care is meaningful.",
+"You don’t have to earn rest.",
+"Gentle effort adds up quietly.",
+"Compassion is a powerful routine.",
+"You can come back at any moment.",
+"Today’s little action is enough for today.",
+"Offer yourself patience; habits bloom there.",
+"You are allowed to start small.",
+"Soft beginnings lead to steady rhythms.",
+"You’re learning, kindly and gradually.",
+"Celebrate the effort, not just the outcome.",
+"Your body and mind appreciate your care.",
+"It’s okay for progress to be quiet.",
+"You can take a breath before you begin.",
+"Tender effort is still strong.",
+"You’re safe to try again.",
+"Let your routine feel like support.",
+"You can choose ease without losing progress.",
+"A gentle routine is a sustainable one.",
+"You are worthy of your own patience.",
+"One caring choice is a lovely start.",
+"Your habits can be soft and sure.",
+"It’s enough to do a little today.",
+"You can be kind and consistent.",
+"Slow progress is still progress.",
+"Your effort matters, even when small.",
+"You can begin wherever you are.",
+"Let today’s step be light.",
+"You’re allowed to make this simple.",
+"Your care for yourself is showing.",
+"Tiny intentions can carry you far.",
+"You don’t need perfect conditions to begin.",
+"It’s okay to lower the bar gently.",
+"You can take pressure off and still grow.",
+"Let comfort guide the first move.",
+"Start soft; see how it feels.",
+"You’re allowed to go at your own speed.",
+"A kind routine is a lasting one.",
+"You can offer yourself grace and try.",
+"Your small effort is appreciated.",
+"You can return, even after pauses.",
+"Soft repetition builds steady strength.",
+"You’re creating a safe place to grow.",
+"A gentle start is a brave act.",
+"You don’t need to prove anything—just care.",
+"Your needs matter in your routine.",
+"You can keep it light and loving.",
+"Today’s little habit is a gift to you.",
+"It’s okay to do less than planned.",
+"Your heart can lead your habits.",
+"You’re practicing kindness in motion.",
+"You can make progress without pushing.",
+"Be soft with expectations; steady with care.",
+"Listen to your energy; meet it kindly.",
+"You’re doing this with tenderness, and it shows.",
+"Your effort can be gentle and genuine.",
+"You can step back in lovingly.",
+"It’s okay to pause and continue.",
+"Your rhythm can be quiet and true.",
+"You don’t have to hurry your healing.",
+"A small effort is still self‑respect.",
+"You can choose the tiniest next step.",
+"Your inner voice can be kind today.",
+"You’re tending to yourself with each rep.",
+"Let comfort be your companion.",
+"You can be soft and still courageous.",
+"Your routine can feel like a hug.",
+"You are enough for this moment.",
+"You can release the pressure and begin.",
+"Your gentle presence is progress.",
+"You’re allowed to try small and try again.",
+"You can be patient and persistent.",
+"Your calm effort is powerful.",
+"You can protect your peace while you grow.",
+"You’re moving at a caring pace.",
+"You can welcome a tiny win.",
+"Your kindness makes returning easier.",
+"You can honor your limits and still show up.",
+"Your habit can be a comfort.",
+"You’re doing something loving for yourself.",
+"You can let this be simple today.",
+"Your steady care is quietly brave.",
+"You can lighten the load and continue.",
+"Your path can be soft underfoot.",
+"You can choose ease without guilt.",
+"Your breath can begin the routine.",
+"You can start with a sip of water.",
+"Your space can support your softness.",
+"You can warm up gently.",
+"Your progress can whisper, not shout.",
+"You can soften the goal and keep the promise.",
+"Your routine can be a kind ritual.",
+"You can keep going without urgency.",
+"Your presence here is enough to begin.",
+"You can let curiosity lead today.",
+"Your small yes counts.",
+"You can forgive yesterday and try today.",
+"Your care is consistent, even when quiet.",
+"You can choose comfort over criticism.",
+"Your effort today can be light and loving.",
+"You can hold yourself with warmth.",
+"Your gentle try is meaningful.",
+"You can welcome small improvements.",
+"Your soft steps are adding up.",
+"You can befriend the process.",
+"Your needs get to be considered.",
+"You can show up as you are.",
+"Your habit can feel like nourishment.",
+"You can be both tender and tenacious.",
+"Your softness is not a weakness.",
+"You can create calm through small acts.",
+"Your progress belongs to you.",
+"You can be kind to the learning curve.",
+"Your patience is planting seeds.",
+"You can allow time to help you.",
+"Your gentle rhythm is enough.",
+"You can make room for rest and return.",
+"Your body appreciates every small kindness.",
+"You can honor how you feel and still begin.",
+"Your gentle focus is welcome here.",
+"You can move forward without pressure.",
+"Your smallest step is worthy of pride.",
+"You can let this be peaceful.",
+"Your caring action is already a win.",
+"You can be steady without strain.",
+"Your habit can be a soft place to land.",
+"You can trust a kinder approach.",
+"Your progress can be tender and true.",
+"You can start with what feels okay.",
+"Your quiet effort carries weight.",
+"You can let today be gentle on purpose.",
+"Your routine can hold you kindly.",
+"You can take a tiny step and rest.",
+"Your calm effort is enough for now.",
+"You can let go of perfect and proceed.",
+"Your small care is real care.",
+"You can choose compassion over criticism.",
+"Your gentle pace is perfectly valid.",
+"You can wrap this habit in kindness.",
+"Your feelings are welcome as you try.",
+"You can soften expectations and continue.",
+"Your kindness makes habits sustainable.",
+"You can be softly proud of starting.",
+"Your gentle start still counts as courage.",
+"You can begin again as many times as needed.",
+"Your inner kindness is guiding you.",
+"You can hold your goals with a light touch.",
+"Your self‑respect grows with each small act.",
+"You can choose a kinder story today.",
+"Your practice can be soothing.",
+"You can be gentle and keep going.",
+"Your routine can feel safe.",
+"You can begin with a breath and a sip.",
+"Your tender effort is building strength.",
+"You can treat yourself like someone you love.",
+"Your small steps deserve celebration.",
+"You can give yourself permission to go easy.",
+"Your choices today can be soft and steady.",
+"You can let the day meet you where you are.",
+"Your habit can be a kind promise.",
+"You can hold rest and progress together.",
+"Your calm yes is enough.",
+"You can choose warmth over worry.",
+"Your gentle effort is beautiful.",
+"You can trust slow and kind.",
+"Your momentum can be mellow.",
+"You can make space for softness.",
+"Your path can be paced by kindness.",
+"You can show up quietly and still shine.",
+"Your progress can feel like comfort.",
+"You can keep company with compassion.",
+"Your routine can be a soft anchor.",
+"You can make room for gentle change.",
+"Your energy today is enough to begin.",
+"You can meet yourself with kindness first.",
+"Your habit can be a tender practice.",
+"You can let small be wonderful.",
+"Your steady softness is strength.",
+"You can choose easeful effort."
+];
+
+    // Apply stored accent on load
+    const storedColor = localStorage.getItem(STORAGE_KEYS.COLOR);
+    if (storedColor) setAccent(storedColor);
+
+    const quoteEl = document.getElementById('quote');
+    const btn = document.getElementById('moreBtn');
+    const colorPick = document.getElementById('colorPick');
+
+    // Initialize color picker and first quote
+    document.addEventListener('DOMContentLoaded', () => {
+      const currentAccent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+      colorPick.value = toHex(currentAccent) || '#4f46e5';
+      if (storedColor) colorPick.value = storedColor;
+      showRandom();
+    });
+
+    colorPick.addEventListener('input', (e) => {
+      const val = e.target.value;
+      setAccent(val);
+      localStorage.setItem(STORAGE_KEYS.COLOR, val);
+    });
+
+    // Random quote logic
+    function pickRandom(excludeIdx = null){
+      let idx = Math.floor(Math.random() * phrases.length);
+      if (excludeIdx !== null && phrases.length > 1) {
+        while (idx === excludeIdx) idx = Math.floor(Math.random() * phrases.length);
+      }
+      return idx;
+    }
+    function show(index){
+      quoteEl.textContent = "“" + phrases[index] + "”";
+      sessionStorage.setItem(STORAGE_KEYS.LAST, String(index));
+    }
+    function showRandom(){
+      const last = sessionStorage.getItem(STORAGE_KEYS.LAST);
+      const lastIdx = last !== null ? Number(last) : null;
+      const nextIdx = pickRandom(lastIdx);
+      show(nextIdx);
+    }
+    btn.addEventListener('click', showRandom);
+
+    // Responsive type scaling based on actual container width (helps inside Notion embeds)
+    const BASE = 720; // design baseline width
+    const MIN_SCALE = 0.85, MAX_SCALE = 1.15;
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries){
+        const w = entry.contentBoxSize
+          ? (Array.isArray(entry.contentBoxSize) ? entry.contentBoxSize[0].inlineSize : entry.contentBoxSize.inlineSize)
+          : entry.contentRect.width;
+        const scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, w / BASE));
+        document.documentElement.style.setProperty('--scale', scale.toFixed(3));
+      }
+    });
+    ro.observe(document.querySelector('.card'));
+
+    // Helpers
+    function setAccent(hex){
+      document.documentElement.style.setProperty('--accent', hex);
+      const darker = darkenHex(hex, 0.12);
+      document.documentElement.style.setProperty('--accent-pressed', darker);
+      document.documentElement.style.setProperty('--ring', hexToRing(hex, 0.35));
+    }
+    function toHex(rgb){
+      if (!rgb || typeof rgb !== 'string' || !rgb.startsWith('rgb')) return null;
+      const nums = rgb.match(/\d+/g).map(Number);
+      const [r,g,b] = nums;
+      return '#' + [r,g,b].map(x => x.toString(16).padStart(2,'0')).join('');
+    }
+    function darkenHex(hex, amount){
+      const {r,g,b} = hexToRgb(hex);
+      const d = (v)=>Math.max(0, Math.floor(v*(1-amount)));
+      return rgbToHex(d(r), d(g), d(b));
+    }
+    function hexToRgb(hex){
+      const m = hex.replace('#','');
+      const v = m.length===3 ? m.split('').map(c=>c+c).join('') : m;
+      const n = parseInt(v,16);
+      return { r:(n>>16)&255, g:(n>>8)&255, b:n&255 };
+    }
+    function rgbToHex(r,g,b){ return '#' + [r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('') }
+    function hexToRing(hex, alpha=0.35){
+      const {r,g,b} = hexToRgb(hex);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+  </script>
+</body>
+</html>
